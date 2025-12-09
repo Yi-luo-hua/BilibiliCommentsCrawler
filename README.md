@@ -1,0 +1,224 @@
+# B站视频评论爬虫工具
+
+一个基于Python的Bilibili视频评论爬取工具，支持爬取视频的所有评论（包括子评论/回复），提供图形界面操作，并将数据导出为CSV格式。
+
+## 功能特点
+
+- ✅ 支持通过视频链接、BV号或AV号爬取评论
+- ✅ 支持爬取主评论和子评论（回复）
+- ✅ 支持按时间或热度排序
+- ✅ 提供图形界面（GUI），操作简单
+- ✅ 实时显示爬取进度和日志
+- ✅ 导出为CSV格式，支持Excel打开
+- ✅ 包含完整的评论信息（用户信息、点赞数、时间等）
+
+## 环境要求
+
+- Python 3.8 或更高版本
+- Windows / Linux / macOS
+
+## 安装步骤
+
+### 第一步：克隆或下载本项目
+
+下载并解压项目文件到任意目录，或使用Git克隆。
+
+### 第二步：安装依赖包（重要！）
+
+#### 方法1：使用一键安装脚本（推荐）
+
+**Windows 用户**：双击运行 `install_dependencies.bat`
+
+**Linux/macOS 用户**：在终端运行
+```bash
+chmod +x install_dependencies.sh
+./install_dependencies.sh
+```
+
+#### 方法2：手动安装
+
+**在项目根目录下**（包含 requirements.txt 的目录）打开命令行终端，运行：
+
+```bash
+pip install -r requirements.txt
+```
+
+**注意**：
+- 如果使用 Python 3.x，可能需要使用 `pip3` 而不是 `pip`
+- 如果使用虚拟环境（venv），请在激活虚拟环境后再安装
+- 如果遇到权限问题，可以尝试添加 `--user` 参数：`pip install --user -r requirements.txt`
+
+### 验证安装
+
+可以运行以下命令验证依赖是否正确安装：
+
+```bash
+python -c "import requests, pandas, customtkinter; print('依赖安装成功！')"
+```
+
+如果没有报错，说明依赖已正确安装。
+
+## 使用方法
+
+### 方法1: 使用GUI界面（推荐）
+
+#### 快速启动：
+
+**Windows 用户**：双击 `启动程序.bat`
+
+**Linux/macOS/或命令行用户**：
+```bash
+python main.py
+```
+
+然后在图形界面中：
+1. 输入视频链接或BV号（例如：`https://www.bilibili.com/video/BV1xx411c7mu` 或 `BV1xx411c7mu`）
+2. 设置爬取参数（是否包含子评论、最大页数、排序模式等）
+3. 选择导出文件路径
+4. 点击"开始爬取"按钮
+5. 等待爬取完成
+6. 点击"导出CSV"按钮保存数据
+
+### 方法2: 使用命令行（代码示例）
+
+```python
+from src.crawler.comment_crawler import CommentCrawler
+from src.processor.data_processor import DataProcessor
+from src.exporter.csv_exporter import CSVExporter
+
+# 创建爬虫
+crawler = CommentCrawler()
+
+# 爬取评论
+comments = crawler.crawl_comments(
+    "BV1xx411c7mu",  # 视频BV号或链接
+    include_replies=True,  # 包含子评论
+    max_pages=100,  # 最大页数
+    mode=3  # 排序模式：3=按时间，2=按热度
+)
+
+# 处理数据
+processor = DataProcessor()
+cleaned_comments = processor.clean_comments(comments)
+flattened_comments = processor.flatten_comments(cleaned_comments)
+
+# 导出CSV
+exporter = CSVExporter()
+exporter.export(flattened_comments, "comments.csv")
+```
+
+## 项目结构
+
+```
+bilibili-comment-crawler/
+├── main.py                      # 主程序入口
+├── 启动程序.bat                 # Windows 快捷启动脚本
+├── install_dependencies.bat     # Windows 依赖安装脚本
+├── install_dependencies.sh      # Linux/macOS 依赖安装脚本
+├── src/
+│   ├── api/
+│   │   └── bilibili_api.py         # B站API调用封装
+│   ├── crawler/
+│   │   └── comment_crawler.py      # 评论爬取核心逻辑
+│   ├── processor/
+│   │   └── data_processor.py       # 数据处理和清洗
+│   ├── exporter/
+│   │   └── csv_exporter.py         # CSV导出功能
+│   └── gui/
+│       └── main_window.py          # GUI主窗口
+├── config/
+│   └── config.py                   # 配置文件
+├── utils/
+│   └── helpers.py                  # 工具函数
+├── requirements.txt                # 依赖列表
+└── README.md                       # 项目说明
+```
+
+## CSV导出字段说明
+
+导出的CSV文件包含以下字段：
+
+- **评论ID**: 评论的唯一标识
+- **根评论ID**: 如果是回复，这是原始评论的ID
+- **是否为回复**: 标识该评论是否为回复
+- **用户名**: 评论者的用户名
+- **用户等级**: 评论者的B站等级
+- **评论内容**: 评论的文本内容
+- **点赞数**: 评论获得的点赞数
+- **回复数**: 评论收到的回复数
+- **时间**: 评论发布时间（格式化）
+- **IP归属地**: 评论者的IP归属地（如果可用）
+
+## 注意事项
+
+1. **遵守法律法规**: 请确保您的使用符合相关法律法规和B站服务条款
+2. **合理使用**: 请控制爬取频率，避免对B站服务器造成过大压力
+3. **数据隐私**: 请妥善保管爬取的数据，尊重用户隐私
+4. **网络环境**: 确保网络连接稳定，某些情况下可能需要科学上网
+5. **反爬虫机制**: B站可能会更新反爬虫机制，如遇到问题请及时更新代码
+
+## 常见问题
+
+### Q: 运行时提示 "No module named 'xxx'" 错误？
+A: 这表示缺少必要的依赖包，请按照以下步骤操作：
+1. 打开命令行终端，切换到项目根目录（包含 requirements.txt 的目录）
+2. 运行：`pip install -r requirements.txt`
+3. 等待所有依赖安装完成
+4. 验证安装：`python -c "import requests, pandas, customtkinter; print('依赖安装成功！')"`
+5. 重新运行程序：`python main.py`
+
+如果仍然遇到问题，请检查：
+- 是否使用了正确的 Python 版本（Python 3.8+）
+- 是否在正确的目录下运行命令
+- 尝试使用 `pip3` 而不是 `pip`
+- 尝试添加 `--user` 参数：`pip install --user -r requirements.txt`
+
+### Q: 启动GUI时提示 "Can't find a usable init.tcl" 错误？
+A: 这是tkinter的Tcl/Tk库路径问题，已自动修复。如果仍有问题：
+1. 确保Python安装完整（包含tkinter组件）
+2. 如果使用虚拟环境，尝试退出虚拟环境使用系统Python
+3. 或运行 `python fix_tkinter.py` 进行诊断
+4. 手动设置环境变量：
+   ```bash
+   set TCL_LIBRARY=<Python安装路径>\tcl\tcl8.6
+   set TK_LIBRARY=<Python安装路径>\tcl\tk8.6
+   ```
+
+### Q: 爬取失败怎么办？
+A: 请检查：
+- 网络连接是否正常
+- 视频ID或链接是否正确
+- 是否触发了B站的反爬虫机制（可以尝试降低爬取频率）
+
+### Q: CSV文件在Excel中打开乱码？
+A: 程序已使用UTF-8 with BOM编码，如果仍有问题，可以尝试用记事本打开后另存为其他编码。
+
+### Q: 如何提高爬取速度？
+A: 可以调整 `config/config.py` 中的 `REQUEST_DELAY` 参数，但请注意不要设置过小，以免触发反爬虫。
+
+### Q: 支持批量爬取多个视频吗？
+A: 当前版本不支持，但可以通过修改代码实现批量爬取功能。
+
+### Q: 如何切换主题？
+A: 点击GUI窗口右上角的主题切换按钮（☀️/🌙）即可在亮色和深色主题之间切换。
+
+## 更新日志
+
+### v1.0.0 (2024)
+- 初始版本发布
+- 支持爬取B站视频评论
+- 提供GUI界面
+- 支持CSV导出
+
+## 许可证
+
+本项目仅供学习和研究使用，请勿用于商业用途。
+
+## 贡献
+
+欢迎提交Issue和Pull Request！
+
+## 联系方式
+
+如有问题或建议，请通过Issue反馈。
+
