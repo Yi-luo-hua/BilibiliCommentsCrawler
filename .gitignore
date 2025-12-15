@@ -1,40 +1,23 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
 
-# Virtual Environment
+# Virtual environments
 venv/
+.venv/
 env/
-ENV/
+
+# PyInstaller
+build/
+dist/
+*.spec
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
 
-# Project specific
-*.csv
-*.log
-config/local_config.py
+# OS
+.DS_Store
+Thumbs.db
+
 user_config.json
-
