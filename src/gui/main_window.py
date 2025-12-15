@@ -137,9 +137,9 @@ class MainWindow:
             font=Theme.FONT_NORMAL,
             fg_color=Theme.BORDER,
             selected_color=Theme.PRIMARY,
-            selected_hover_color="#f25f88",
+            selected_hover_color=Theme.PRIMARY,
             unselected_color=Theme.SURFACE,
-            unselected_hover_color="#ededed",
+            unselected_hover_color=Theme.PRIMARY,
             corner_radius=Theme.RADIUS_INPUT,
             command=self._on_sort_change,
         )
@@ -149,14 +149,18 @@ class MainWindow:
         frame = CardFrame(self.root)
         frame.grid(row=3, column=0, sticky="we", padx=20, pady=(4, 8))
         frame.grid_columnconfigure(0, weight=1)
-        frame.grid_columnconfigure(1, weight=1)
 
         path_label = ctk.CTkLabel(frame, text="导出路径", text_color=Theme.TEXT_SECONDARY, font=Theme.FONT_NORMAL)
         path_label.grid(row=0, column=0, sticky="w", padx=14, pady=(10, 4))
 
+        # 创建包含输入框和浏览按钮的子框架
+        path_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        path_frame.grid(row=1, column=0, sticky="we", padx=14, pady=(0, 10))
+        path_frame.grid_columnconfigure(0, weight=1)
+
         self.export_path_var = ctk.StringVar(value="bilibili_comments.csv")
         path_entry = ctk.CTkEntry(
-            frame,
+            path_frame,
             textvariable=self.export_path_var,
             corner_radius=Theme.RADIUS_INPUT,
             border_width=1,
@@ -165,10 +169,10 @@ class MainWindow:
             font=Theme.FONT_NORMAL,
             text_color=Theme.TEXT_PRIMARY,
         )
-        path_entry.grid(row=1, column=0, sticky="we", padx=14, pady=(0, 10))
+        path_entry.grid(row=0, column=0, sticky="we", padx=(0, 8))
 
         browse_btn = ctk.CTkButton(
-            frame,
+            path_frame,
             text="浏览...",
             width=90,
             height=32,
@@ -178,7 +182,7 @@ class MainWindow:
             text_color="white",
             command=self._browse_file,
         )
-        browse_btn.grid(row=1, column=1, sticky="e", padx=14, pady=(0, 10))
+        browse_btn.grid(row=0, column=1, sticky="w")
 
         btn_wrap = ctk.CTkFrame(frame, fg_color="transparent")
         btn_wrap.grid(row=2, column=0, columnspan=2, sticky="e", padx=8, pady=(4, 10))
