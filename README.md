@@ -4,6 +4,8 @@
 
 使用Cursor,Trae,Warp完成，gemini,claude助力。
 
+如果有帮助的话，麻烦点个star⭐️谢谢喵！
+
 ## 功能特点
 
 - ✅ 支持通过视频链接、BV号或AV号爬取评论
