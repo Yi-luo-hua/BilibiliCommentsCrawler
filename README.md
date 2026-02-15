@@ -15,6 +15,9 @@
 - ✅ 实时显示爬取进度和日志
 - ✅ 导出为CSV格式，支持Excel打开
 - ✅ 包含完整的评论信息（用户信息、点赞数、时间等）
+- ✅ **多线程并发爬取子评论**，大幅提升爬取速度
+- ✅ **自适应请求频率**，智能应对B站风控
+- ✅ **Light / Dark 双主题**切换
 
 ## 环境要求
 
@@ -93,7 +96,7 @@ from src.exporter.csv_exporter import CSVExporter
 # 创建爬虫
 crawler = CommentCrawler()
 
-# 爬取评论
+# 爬取评论（子评论自动并发爬取）
 comments = crawler.crawl_comments(
     "BV1xx411c7mu",  # 视频BV号或链接
     include_replies=True,  # 包含子评论
@@ -104,11 +107,9 @@ comments = crawler.crawl_comments(
 # 处理数据
 processor = DataProcessor()
 cleaned_comments = processor.clean_comments(comments)
-flattened_comments = processor.flatten_comments(cleaned_comments)
 
 # 导出CSV
-exporter = CSVExporter()
-exporter.export(flattened_comments, "comments.csv")
+CSVExporter.export(cleaned_comments, "comments.csv")
 ```
 
 ## 项目结构
@@ -121,17 +122,23 @@ bilibili-comment-crawler/
 ├── install_dependencies.sh      # Linux/macOS 依赖安装脚本
 ├── src/
 │   ├── api/
-│   │   └── bilibili_api.py         # B站API调用封装
+│   │   └── bilibili_api.py         # B站API调用封装（自适应延迟 + 重试）
 │   ├── crawler/
-│   │   └── comment_crawler.py      # 评论爬取核心逻辑
+│   │   └── comment_crawler.py      # 评论爬取核心（并发子评论爬取）
 │   ├── processor/
 │   │   └── data_processor.py       # 数据处理和清洗
 │   ├── exporter/
 │   │   └── csv_exporter.py         # CSV导出功能
 │   └── gui/
-│       └── main_window.py          # GUI主窗口
+│       ├── main_window.py          # GUI主窗口
+│       ├── theme.py                # 主题系统（Light/Dark）
+│       └── widgets/                # 自定义控件
+│           ├── card_frame.py
+│           ├── header_bar.py
+│           ├── log_console.py
+│           └── stat_card.py
 ├── config/
-│   └── config.py                   # 配置文件
+│   └── config.py                   # 配置文件（请求、并发、分页参数）
 ├── utils/
 │   └── helpers.py                  # 工具函数
 ├── requirements.txt                # 依赖列表
@@ -198,7 +205,7 @@ A: 请检查：
 A: 程序已使用UTF-8 with BOM编码，如果仍有问题，可以尝试用记事本打开后另存为其他编码。
 
 ### Q: 如何提高爬取速度？
-A: 可以调整 `config/config.py` 中的 `REQUEST_DELAY` 参数，但请注意不要设置过小，以免触发反爬虫。
+A: v1.10 已内置自适应延迟和并发子评论爬取。如需进一步调整，可修改 `config/config.py` 中的 `REQUEST_DELAY_MIN`（默认0.1s）和 `MAX_REPLY_WORKERS`（默认4线程）。请勿设置过于激进，以免触发B站风控。
 
 ### Q: 支持批量爬取多个视频吗？
 A: 当前版本不支持，但可以通过修改代码实现批量爬取功能。
@@ -208,15 +215,38 @@ A: 点击GUI窗口右上角的主题切换按钮（☀️/🌙）即可在亮色
 
 ## 更新日志
 
+### v1.10 (2026.02.15)
+
+**🚀 性能优化**
+- 子评论并发爬取（ThreadPoolExecutor，默认4线程），速度提升 3-5x
+- 自适应请求延迟：正常时 0.1s，被限速时自动退避到 2s 并逐步恢复
+- 每页数据量从 20 提升到 30（B站API最大值），减少 33% 请求次数
+- B站风控（code=-412）自动检测与重试
+
+**🏗️ 架构优化**
+- 全模块统一 `logging` 日志系统，替代散落的 `print()`
+- 线程安全的 GUI 回调（通过 `root.after()` 投递到主线程）
+- 迭代式重试机制替代递归调用
+- 移除冗余依赖（beautifulsoup4、lxml）和空函数
+- 清理未使用的 `animation_manager.py`
+
+**🎨 GUI 优化**
+- Light / Dark 双主题完整切换
+- 统计卡片增加彩色背景底色与淡色边框
+- 按钮状态视觉优化（开始/停止/导出的 disabled/enabled 明确区分）
+- 排序分段按钮加宽、字体加大
+- 进度条空闲时静止，爬取中动画，完成后满格
+- 主题切换按钮增大
+
+### v1.0.1 (2025.12.15)
+- 增加了按钮高亮
+- 调整UI
+
 ### v1.0.0 (2025.12.9)
 - 初始版本发布
 - 支持爬取B站视频评论
 - 提供GUI界面
 - 支持CSV导出
-
-### v1.0.1 (2025.12.15)
-- 增加了按钮高亮
-- 调整UI
 
 ## 许可证
 

@@ -7,9 +7,6 @@ from src.gui.theme import Theme
 
 class LogConsole(ctk.CTkFrame):
     def __init__(self, master, dark_mode: bool = False, *args, **kwargs):
-        fg = "#2B2B2B" if dark_mode else "#F1F2F3"
-        text_color = "#DADADA" if dark_mode else Theme.TEXT_PRIMARY
-
         super().__init__(
             master,
             fg_color=Theme.SURFACE,
@@ -18,6 +15,8 @@ class LogConsole(ctk.CTkFrame):
             *args,
             **kwargs,
         )
+        fg = "#2B2B2B" if dark_mode else "#F1F2F3"
+        text_color = "#DADADA" if dark_mode else Theme.TEXT_PRIMARY
 
         self.text = ctk.CTkTextbox(
             self,
@@ -37,7 +36,11 @@ class LogConsole(ctk.CTkFrame):
         self.text.delete("1.0", "end")
 
     def set_dark(self, dark: bool):
-        fg = "#2B2B2B" if dark else "#F1F2F3"
+        fg = "#1E1E22" if dark else "#F1F2F3"
         text_color = "#DADADA" if dark else Theme.TEXT_PRIMARY
         self.text.configure(fg_color=fg, text_color=text_color)
 
+    def update_theme(self, dark: bool):
+        """主题切换时更新"""
+        self.configure(fg_color=Theme.get("SURFACE"))
+        self.set_dark(dark)

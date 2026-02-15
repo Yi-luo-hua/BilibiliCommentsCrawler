@@ -1,8 +1,5 @@
 requests>=2.31.0
 pandas>=2.0.0
-beautifulsoup4>=4.12.0
-lxml>=4.9.0
 
 # GUI
 customtkinter>=5.2.2
-

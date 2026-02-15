@@ -15,14 +15,18 @@ DEFAULT_HEADERS = {
 }
 
 # 请求配置
-REQUEST_TIMEOUT = 10  # 请求超时时间（秒）
-REQUEST_DELAY = 0.5   # 请求间隔（秒），避免请求过快
-MAX_RETRIES = 3       # 最大重试次数
+REQUEST_TIMEOUT = 10        # 请求超时时间（秒）
+REQUEST_DELAY_MIN = 0.1     # 正常请求最小间隔（秒）
+REQUEST_DELAY_MAX = 2.0     # 被限速时最大间隔（秒）
+REQUEST_DELAY_DEFAULT = 0.15  # 默认请求间隔（秒）
+MAX_RETRIES = 3             # 最大重试次数
 
 # 分页配置
-DEFAULT_PAGE_SIZE = 20  # 每页评论数量
-MAX_PAGES = 1000        # 最大爬取页数（防止无限爬取）
+DEFAULT_PAGE_SIZE = 30      # 每页评论/回复数量（B站API最大30）
+MAX_PAGES = 1000            # 最大爬取页数（防止无限爬取）
+
+# 并发配置
+MAX_REPLY_WORKERS = 4       # 子评论并发爬取线程数
 
 # CSV导出配置
-CSV_ENCODING = "utf-8-sig"  # 使用UTF-8 with BOM，Excel可以正确识别中文
-
+CSV_ENCODING = "utf-8-sig"  # UTF-8 with BOM，Excel可以正确识别中文

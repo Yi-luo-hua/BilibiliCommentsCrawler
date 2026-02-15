@@ -16,3 +16,6 @@ class CardFrame(ctk.CTkFrame):
             **kwargs,
         )
 
+    def update_theme(self):
+        """主题切换时更新背景"""
+        self.configure(fg_color=Theme.get("SURFACE"))

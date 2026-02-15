@@ -31,14 +31,15 @@ class HeaderBar(ctk.CTkFrame):
         self.toggle_btn = ctk.CTkButton(
             self,
             text="🌙",
-            width=42,
-            height=30,
-            corner_radius=12,
+            width=50,
+            height=34,
+            corner_radius=14,
             fg_color=Theme.SURFACE,
             text_color=Theme.TEXT_PRIMARY,
             hover_color=Theme.BORDER,
             border_width=1,
             border_color=Theme.BORDER,
+            font=("Segoe UI Emoji", 16),
             command=self._toggle,
         )
         self.toggle_btn.grid(row=0, column=1, padx=(8, 0))
@@ -48,6 +49,14 @@ class HeaderBar(ctk.CTkFrame):
             self.on_toggle_theme()
 
     def set_mode_icon(self, mode: str):
-        # mode: "light" or "dark"
         self.toggle_btn.configure(text="🌙" if mode == "light" else "☀️")
 
+    def update_theme(self):
+        """主题切换时更新自身颜色"""
+        self.configure(fg_color=Theme.get("BACKGROUND"))
+        self.toggle_btn.configure(
+            fg_color=Theme.get("SURFACE"),
+            text_color=Theme.get("TEXT_PRIMARY"),
+            hover_color=Theme.get("BORDER"),
+            border_color=Theme.get("BORDER"),
+        )
