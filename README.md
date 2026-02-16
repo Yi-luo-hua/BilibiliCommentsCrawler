@@ -2,7 +2,7 @@
 
 一个基于Python的Bilibili视频评论爬取工具，支持爬取视频的所有评论（包括子评论/回复），提供图形界面操作，并将数据导出为CSV格式。
 
-使用Cursor,Trae,Warp完成，gemini,claude助力。
+使用Cursor,Trae,Warp,antigravity完成。
 
 如果有帮助的话，麻烦点个star⭐️谢谢喵！
 
