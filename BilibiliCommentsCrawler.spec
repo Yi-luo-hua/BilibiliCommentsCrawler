@@ -2,6 +2,10 @@
 import os
 import sys
 
+# PyInstaller 的 tkinter 检测在隔离子进程中运行，需要设置环境变量
+os.environ.setdefault('TCL_LIBRARY', os.path.join(sys.base_prefix, 'tcl', 'tcl8.6'))
+os.environ.setdefault('TK_LIBRARY', os.path.join(sys.base_prefix, 'tcl', 'tk8.6'))
+
 # 获取Tcl/Tk库路径
 tcl_lib_path = os.path.join(sys.base_prefix, 'tcl', 'tcl8.6')
 tk_lib_path = os.path.join(sys.base_prefix, 'tcl', 'tk8.6')
