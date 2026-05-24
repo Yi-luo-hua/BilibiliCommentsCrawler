@@ -1,23 +1,47 @@
-# Python
+# ===== Python =====
 __pycache__/
 *.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+*.spec
 
-# Virtual environments
+# ===== Virtual environments =====
 venv/
 .venv/
 env/
+.env/
 
-# PyInstaller
-build/
-dist/
-*.spec
+# ===== Environment & config =====
+.env
+.env.*
+user_config.json
 
-# IDE
-.vscode/
-.idea/
+# ===== Logs =====
+*.log
+logs/
 
-# OS
+# ===== OS =====
 .DS_Store
 Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
 
-user_config.json
+# ===== IDE =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ===== AI tools =====
+.claude-code-history/
+.codex-history/
+.cursor/
+.copilot/
+.roo/
+
+# ===== Export artifacts =====
+*.csv
+*.xlsx
