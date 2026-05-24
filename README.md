@@ -40,7 +40,14 @@ pip install -r requirements.txt
 
 ## 使用方法
 
+### 直接下载（推荐）
+
+从 [Releases](https://github.com/Yi-luo-hua/BilibiliCommentsCrawler/releases) 页面下载最新版 `exe` 文件，双击运行即可，无需安装 Python 环境。
+
+### 源码运行
+
 ```bash
+pip install -r requirements.txt
 python main.py
 ```
 
