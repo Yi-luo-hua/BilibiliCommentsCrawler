@@ -90,6 +90,24 @@ class DataProcessor:
         return filtered
 
     @staticmethod
+    def filter_dynamics(dynamics: List[Dict], keyword: str = "") -> List[Dict]:
+        """
+        按关键词过滤动态数据
+
+        Args:
+            dynamics: 动态列表
+            keyword: 过滤关键词（不区分大小写），为空则返回全部
+
+        Returns:
+            过滤后的动态列表
+        """
+        if not keyword:
+            return dynamics
+
+        kw = keyword.lower()
+        return [d for d in dynamics if kw in d.get('content', '').lower()]
+
+    @staticmethod
     def get_statistics(comments: List[Dict]) -> Dict:
         """
         获取评论统计信息

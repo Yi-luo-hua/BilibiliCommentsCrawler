@@ -3,3 +3,5 @@ pandas>=2.0.0
 
 # GUI
 customtkinter>=5.2.2
+qrcode>=7.4
+Pillow>=10.0

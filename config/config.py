@@ -34,5 +34,15 @@ MAX_PAGES = 1000            # 最大爬取页数（防止无限爬取）
 # 并发配置
 MAX_REPLY_WORKERS = 4       # 子评论并发爬取线程数
 
+# 用户空间动态API
+SPACE_DYNAMICS_API_URL = "https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/space"
+# 关注页动态流API（需要登录Cookie）
+FOLLOWING_FEED_API_URL = "https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/all"
+MAX_DYNAMICS_PAGES = 100
+
+# 扫码登录API
+PASSPORT_QR_GENERATE_URL = "https://passport.bilibili.com/x/passport-login/web/qrcode/generate"
+PASSPORT_QR_POLL_URL = "https://passport.bilibili.com/x/passport-login/web/qrcode/poll"
+
 # CSV导出配置
 CSV_ENCODING = "utf-8-sig"  # UTF-8 with BOM，Excel可以正确识别中文

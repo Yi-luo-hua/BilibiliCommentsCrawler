@@ -9,7 +9,12 @@ from typing import Optional
 
 import customtkinter as ctk
 
+import qrcode
+from PIL import Image, ImageDraw
+from io import BytesIO
+
 from src.crawler.comment_crawler import CommentCrawler
+from src.crawler.dynamic_crawler import DynamicCrawler
 from src.exporter.csv_exporter import CSVExporter
 from src.processor.data_processor import DataProcessor
 from src.gui.theme import Theme, init_theme
@@ -17,6 +22,7 @@ from src.gui.widgets.header_bar import HeaderBar
 from src.gui.widgets.card_frame import CardFrame
 from src.gui.widgets.stat_card import StatCard
 from src.gui.widgets.log_console import LogConsole
+from utils.helpers import parse_input, extract_uid
 
 logger = logging.getLogger(__name__)
 
@@ -29,16 +35,21 @@ class MainWindow:
         init_theme()
         self.appearance = "light"
 
-        self.root.title("B站评论爬虫工具 - 支持视频/动态/文章")
-        self.root.geometry("960x820")
+        self.root.title("B站爬虫工具 - 评论 / 动态")
+        self.root.geometry("960x880")
         self.root.minsize(880, 720)
         self.root.configure(fg_color=Theme.BACKGROUND)
 
         # 逻辑
-        self.crawler: Optional[CommentCrawler] = None
+        self.crawler = None
+        self.dynamic_crawler = None
         self.crawler_thread: Optional[threading.Thread] = None
         self.is_crawling = False
         self.comments = []
+        self.dynamics = []
+        self.mode = "comments"  # "comments" | "dynamics"
+        self._logged_in = False
+        self._api = None  # 共享的动态爬取API实例
         self.stat_cards = {}
         self._all_cards = []  # 收集所有 CardFrame 用于主题切换
 
@@ -50,33 +61,56 @@ class MainWindow:
     # ============================================================
     def _build_layout(self):
         self.root.grid_columnconfigure(0, weight=1)
-        self.root.grid_rowconfigure(5, weight=1)
+        self.root.grid_rowconfigure(6, weight=1)
 
         # 顶部栏
         self.header = HeaderBar(self.root, on_toggle_theme=self._toggle_theme)
         self.header.grid(row=0, column=0, sticky="we", padx=20, pady=(16, 6))
 
-        self._build_video_card()
+        self._build_mode_selector()
+        self._build_content_card()
         self._build_params_card()
         self._build_actions()
         self._build_stat_cards()
         self._build_log_console()
 
-    def _build_video_card(self):
+    def _build_mode_selector(self):
         card = CardFrame(self.root)
         card.grid(row=1, column=0, sticky="we", padx=20, pady=6)
+        self._all_cards.append(card)
+
+        self.mode_var = ctk.StringVar(value="评论爬取")
+        self.mode_segment = ctk.CTkSegmentedButton(
+            card,
+            values=["评论爬取", "动态爬取"],
+            font=("Microsoft YaHei UI", 13),
+            fg_color=Theme.BORDER,
+            selected_color=Theme.PRIMARY,
+            selected_hover_color=Theme.PRIMARY,
+            unselected_color=Theme.SURFACE,
+            unselected_hover_color=Theme.BORDER,
+            corner_radius=Theme.RADIUS_INPUT,
+            command=self._on_mode_change,
+        )
+        self.mode_segment.set("评论爬取")
+        self.mode_segment.grid(row=0, column=0, sticky="w", padx=14, pady=10)
+
+    def _build_content_card(self):
+        card = CardFrame(self.root)
+        card.grid(row=2, column=0, sticky="we", padx=20, pady=6)
         card.grid_columnconfigure(1, weight=1)
         self._all_cards.append(card)
 
         title = ctk.CTkLabel(card, text="内容信息", font=Theme.FONT_SECTION, text_color=Theme.TEXT_PRIMARY)
         title.grid(row=0, column=0, columnspan=2, sticky="w", padx=14, pady=(12, 4))
-        self._video_title_label = title
+        self._content_title_label = title
 
-        label = ctk.CTkLabel(card, text="链接 / ID", text_color=Theme.TEXT_SECONDARY, font=Theme.FONT_NORMAL)
-        label.grid(row=1, column=0, sticky="w", padx=14, pady=(6, 12))
-        self._video_label = label
+        label = ctk.CTkLabel(card, text="链接 / ID", text_color=Theme.TEXT_SECONDARY,
+                             font=Theme.FONT_NORMAL, width=110, anchor="w")
+        label.grid(row=1, column=0, sticky="w", padx=(14, 4), pady=(6, 4))
+        self._link_label = label
 
-        self.video_entry = ctk.CTkEntry(
+        self.link_entry = ctk.CTkEntry(
             card,
             placeholder_text="视频BV号/链接、动态链接(t.bilibili.com/xxx)、文章cv号/链接",
             corner_radius=Theme.RADIUS_INPUT,
@@ -86,20 +120,66 @@ class MainWindow:
             font=Theme.FONT_NORMAL,
             text_color=Theme.TEXT_PRIMARY,
         )
-        self.video_entry.grid(row=1, column=1, sticky="we", padx=14, pady=(6, 12))
+        self.link_entry.grid(row=1, column=1, sticky="we", padx=(0, 14), pady=(6, 4))
+
+        # 关键词筛选（仅动态模式显示）
+        self._keyword_label = ctk.CTkLabel(card, text="关键词筛选", text_color=Theme.TEXT_SECONDARY,
+                                            font=Theme.FONT_NORMAL, width=110, anchor="w")
+        self._keyword_label.grid(row=2, column=0, sticky="w", padx=(14, 4), pady=(4, 12))
+
+        self.keyword_entry = ctk.CTkEntry(
+            card,
+            placeholder_text="按关键词筛选动态内容（留空不过滤）",
+            corner_radius=Theme.RADIUS_INPUT,
+            border_width=1,
+            fg_color=Theme.SURFACE,
+            border_color=Theme.BORDER,
+            font=Theme.FONT_NORMAL,
+            text_color=Theme.TEXT_PRIMARY,
+        )
+        self.keyword_entry.grid(row=2, column=1, sticky="we", padx=(0, 14), pady=(4, 12))
+
+        # 扫码登录按钮（仅动态模式显示）
+        self.qr_login_btn = ctk.CTkButton(
+            card,
+            text="扫码登录",
+            width=100,
+            height=30,
+            corner_radius=Theme.RADIUS_BUTTON,
+            fg_color=Theme.ACCENT,
+            hover_color="#1f9bcb",
+            text_color="white",
+            font=Theme.FONT_NORMAL,
+            command=self._show_qr_login,
+        )
+        self.qr_login_btn.grid(row=3, column=1, sticky="w", padx=(0, 14), pady=(4, 4))
+
+        self.login_status_label = ctk.CTkLabel(
+            card, text="", text_color=Theme.PRIMARY, font=("Microsoft YaHei UI", 11)
+        )
+        self.login_status_label.grid(row=3, column=1, sticky="w", padx=(0, 14), pady=(4, 4))
+        self.login_status_label.grid_remove()
+
+        # 评论模式默认隐藏关键词行、扫码登录
+        self._keyword_label.grid_remove()
+        self.keyword_entry.grid_remove()
+        self.qr_login_btn.grid_remove()
+        self.login_status_label.grid_remove()
 
     def _build_params_card(self):
         card = CardFrame(self.root)
-        card.grid(row=2, column=0, sticky="we", padx=20, pady=6)
-        for i in range(3):
-            card.grid_columnconfigure(i, weight=1)
+        card.grid(row=3, column=0, sticky="we", padx=20, pady=6)
+        card.grid_columnconfigure(1, weight=1)
         self._all_cards.append(card)
 
         title = ctk.CTkLabel(card, text="爬取参数", font=Theme.FONT_SECTION, text_color=Theme.TEXT_PRIMARY)
-        title.grid(row=0, column=0, columnspan=3, sticky="w", padx=14, pady=(12, 6))
+        title.grid(row=0, column=0, columnspan=2, sticky="w", padx=14, pady=(12, 6))
         self._params_title_label = title
 
-        # 开关
+        LABEL_W = 14  # 标签左内边距（由 grid padx 控制）
+        CTRL_X = 14   # 控件左内边距
+
+        # 包含子评论/回复
         self.include_replies_var = ctk.BooleanVar(value=True)
         self.include_switch = ctk.CTkSwitch(
             card,
@@ -114,18 +194,19 @@ class MainWindow:
             text_color=Theme.TEXT_PRIMARY,
             font=Theme.FONT_NORMAL,
         )
-        self.include_switch.grid(row=1, column=0, sticky="w", padx=14, pady=(4, 10))
+        self.include_switch.grid(row=1, column=0, columnspan=2, sticky="w", padx=14, pady=(4, 6))
 
         # 最大爬取页数
         self._pages_label = ctk.CTkLabel(
-            card, text="最大爬取页数", text_color=Theme.TEXT_SECONDARY, font=Theme.FONT_NORMAL
+            card, text="最大爬取页数", text_color=Theme.TEXT_SECONDARY, font=Theme.FONT_NORMAL,
+            width=110, anchor="w",
         )
-        self._pages_label.grid(row=1, column=1, sticky="w", padx=14, pady=(4, 2))
+        self._pages_label.grid(row=2, column=0, sticky="w", padx=(14, 4), pady=4)
         self.max_pages_var = ctk.StringVar(value="100")
         self.max_pages_entry = ctk.CTkEntry(
             card,
             textvariable=self.max_pages_var,
-            width=120,
+            width=100,
             corner_radius=Theme.RADIUS_INPUT,
             border_width=1,
             fg_color=Theme.SURFACE,
@@ -133,13 +214,14 @@ class MainWindow:
             font=Theme.FONT_NORMAL,
             text_color=Theme.TEXT_PRIMARY,
         )
-        self.max_pages_entry.grid(row=2, column=1, sticky="w", padx=14, pady=(0, 10))
+        self.max_pages_entry.grid(row=2, column=1, sticky="w", padx=CTRL_X, pady=4)
 
         # 排序模式
         self._sort_label = ctk.CTkLabel(
-            card, text="排序模式", text_color=Theme.TEXT_SECONDARY, font=Theme.FONT_NORMAL
+            card, text="排序模式", text_color=Theme.TEXT_SECONDARY, font=Theme.FONT_NORMAL,
+            width=110, anchor="w",
         )
-        self._sort_label.grid(row=1, column=2, sticky="w", padx=14, pady=(4, 2))
+        self._sort_label.grid(row=3, column=0, sticky="w", padx=(14, 4), pady=4)
         self.sort_mode_var = ctk.StringVar(value="3")
         self.sort_segment = ctk.CTkSegmentedButton(
             card,
@@ -155,21 +237,50 @@ class MainWindow:
             command=self._on_sort_change,
         )
         self.sort_segment.set("按时间")
-        self.sort_segment.grid(row=2, column=2, sticky="w", padx=14, pady=(0, 10))
+        self.sort_segment.grid(row=3, column=1, sticky="w", padx=CTRL_X, pady=4)
+
+        # 时间范围（仅动态模式显示）
+        self._time_label = ctk.CTkLabel(
+            card, text="时间范围", text_color=Theme.TEXT_SECONDARY, font=Theme.FONT_NORMAL,
+            width=110, anchor="w",
+        )
+        self._time_label.grid(row=4, column=0, sticky="w", padx=(14, 4), pady=4)
+        self._time_label.grid_remove()
+
+        self.time_combo = ctk.CTkComboBox(
+            card,
+            values=["不限", "最近1小时", "最近3小时", "最近6小时", "最近12小时",
+                    "最近1天", "最近3天", "最近7天"],
+            width=200,
+            corner_radius=Theme.RADIUS_INPUT,
+            border_width=1,
+            fg_color=Theme.SURFACE,
+            border_color=Theme.BORDER,
+            font=Theme.FONT_NORMAL,
+            text_color=Theme.TEXT_PRIMARY,
+            dropdown_font=Theme.FONT_NORMAL,
+            button_color=Theme.PRIMARY,
+            button_hover_color=Theme.PRIMARY,
+            command=self._on_time_preset_change,
+        )
+        self.time_combo.set("不限")
+        self.time_combo.grid(row=4, column=1, sticky="w", padx=CTRL_X, pady=4)
+        self.time_combo.grid_remove()
 
     def _build_actions(self):
         frame = CardFrame(self.root)
-        frame.grid(row=3, column=0, sticky="we", padx=20, pady=(4, 6))
-        frame.grid_columnconfigure(0, weight=1)
+        frame.grid(row=4, column=0, sticky="we", padx=20, pady=(4, 6))
+        frame.grid_columnconfigure(1, weight=1)
         self._all_cards.append(frame)
 
         self._path_label = ctk.CTkLabel(
-            frame, text="导出路径", text_color=Theme.TEXT_SECONDARY, font=Theme.FONT_NORMAL
+            frame, text="导出路径", text_color=Theme.TEXT_SECONDARY, font=Theme.FONT_NORMAL,
+            width=110, anchor="w",
         )
-        self._path_label.grid(row=0, column=0, sticky="w", padx=14, pady=(10, 4))
+        self._path_label.grid(row=0, column=0, sticky="w", padx=(14, 4), pady=(10, 4))
 
         path_frame = ctk.CTkFrame(frame, fg_color="transparent")
-        path_frame.grid(row=1, column=0, sticky="we", padx=14, pady=(0, 10))
+        path_frame.grid(row=0, column=1, sticky="we", padx=(0, 14), pady=(10, 4))
         path_frame.grid_columnconfigure(0, weight=1)
 
         self.export_path_var = ctk.StringVar(value="bilibili_comments.csv")
@@ -196,7 +307,7 @@ class MainWindow:
             text_color="white",
             command=self._browse_file,
         )
-        self.browse_btn.grid(row=0, column=1, sticky="w")
+        self.browse_btn.grid(row=0, column=1, sticky="e")
 
         btn_wrap = ctk.CTkFrame(frame, fg_color="transparent")
         btn_wrap.grid(row=2, column=0, columnspan=2, sticky="e", padx=8, pady=(4, 10))
@@ -250,7 +361,7 @@ class MainWindow:
 
     def _build_stat_cards(self):
         frame = ctk.CTkFrame(self.root, fg_color="transparent")
-        frame.grid(row=4, column=0, sticky="we", padx=20, pady=4)
+        frame.grid(row=5, column=0, sticky="we", padx=20, pady=4)
         for i in range(4):
             frame.grid_columnconfigure(i, weight=1)
         self._stat_frame = frame
@@ -273,8 +384,8 @@ class MainWindow:
 
     def _build_log_console(self):
         self.log_card = CardFrame(self.root)
-        self.log_card.grid(row=5, column=0, sticky="nsew", padx=20, pady=(4, 16))
-        self.root.grid_rowconfigure(5, weight=1)
+        self.log_card.grid(row=6, column=0, sticky="nsew", padx=20, pady=(4, 16))
+        self.root.grid_rowconfigure(6, weight=1)
         self.log_card.grid_columnconfigure(0, weight=1)
         self.log_card.grid_rowconfigure(1, weight=1)
         self._all_cards.append(self.log_card)
@@ -311,6 +422,198 @@ class MainWindow:
     # ============================================================
     #  事件处理
     # ============================================================
+    def _on_mode_change(self, value):
+        is_dynamics = (value == "动态爬取")
+        self.mode = "dynamics" if is_dynamics else "comments"
+
+        if is_dynamics:
+            self.link_entry.configure(
+                placeholder_text="用户UID/空间链接 (留空则爬取关注页动态流)"
+            )
+            self._keyword_label.grid()
+            self.keyword_entry.grid()
+            self._time_label.grid()
+            self.time_combo.grid()
+            self.time_combo.set("不限")
+            self._stat_frame.grid_remove()
+            self.sort_segment.grid_remove()
+            self._sort_label.grid_remove()
+            if self._logged_in:
+                self.login_status_label.grid()
+            else:
+                self.qr_login_btn.grid()
+            self.include_switch.grid_remove()
+        else:
+            self.link_entry.configure(
+                placeholder_text="视频BV号/链接、动态链接(t.bilibili.com/xxx)、文章cv号/链接"
+            )
+            self._keyword_label.grid_remove()
+            self.keyword_entry.grid_remove()
+            self._time_label.grid_remove()
+            self.time_combo.grid_remove()
+            self.qr_login_btn.grid_remove()
+            self.login_status_label.grid_remove()
+            self._stat_frame.grid()
+            self.sort_segment.grid()
+            self._sort_label.grid()
+            self.include_switch.grid()
+
+        self.comments = []
+        self.dynamics = []
+        for card in self.stat_cards.values():
+            card.update_value("0")
+
+    def _show_qr_login(self):
+        """扫码登录弹窗"""
+        from src.api.bilibili_api import BilibiliAPI
+
+        api = BilibiliAPI()
+        result = api.generate_qrcode()
+        if not result:
+            messagebox.showerror("错误", "获取二维码失败，请检查网络")
+            return
+
+        qr_url, qrcode_key = result
+
+        # 生成二维码图片
+        qr = qrcode.QRCode(box_size=8, border=2)
+        qr.add_data(qr_url)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
+        img = img.resize((280, 280), Image.LANCZOS)
+
+        # 转为CTkImage
+        ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(280, 280))
+
+        # 弹窗
+        dialog = ctk.CTkToplevel(self.root)
+        dialog.title("B站扫码登录")
+        dialog.geometry("360x420")
+        dialog.resizable(False, False)
+        dialog.configure(fg_color=Theme.SURFACE)
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        qr_label = ctk.CTkLabel(dialog, text="", image=ctk_img)
+        qr_label.pack(pady=(20, 10))
+
+        status_var = ctk.StringVar(value="请使用B站App扫码")
+        status_label = ctk.CTkLabel(
+            dialog, textvariable=status_var,
+            font=("Microsoft YaHei UI", 13),
+            text_color=Theme.TEXT_PRIMARY,
+        )
+        status_label.pack(pady=(4, 20))
+
+        qrcode_key_ref = [qrcode_key]
+        cancelled = [False]
+        poll_id = [None]
+
+        def stop_poll():
+            cancelled[0] = True
+            if poll_id[0] is not None:
+                self.root.after_cancel(poll_id[0])
+                poll_id[0] = None
+
+        def schedule_poll():
+            if not cancelled[0]:
+                poll_id[0] = self.root.after(2000, poll)
+
+        def poll():
+            if cancelled[0]:
+                return
+            try:
+                code, cookies = api.poll_qrcode(qrcode_key_ref[0])
+            except Exception:
+                code = -1
+
+            if cancelled[0]:
+                return
+
+            if code == 0:
+                stop_poll()
+                self._on_login_success(api, cookies)
+                try:
+                    dialog.destroy()
+                except Exception:
+                    pass
+                return
+            elif code == 86090:
+                try:
+                    status_var.set("已扫码，请在手机上确认...")
+                except Exception:
+                    return
+            elif code == 86038:
+                try:
+                    status_var.set("二维码已过期，重新获取中...")
+                except Exception:
+                    return
+                new_result = api.generate_qrcode()
+                if new_result and not cancelled[0]:
+                    new_url, new_key = new_result
+                    qrcode_key_ref[0] = new_key
+                    qr2 = qrcode.QRCode(box_size=8, border=2)
+                    qr2.add_data(new_url)
+                    qr2.make(fit=True)
+                    img2 = qr2.make_image(fill_color="black", back_color="white")
+                    img2 = img2.resize((280, 280), Image.LANCZOS)
+                    ctk_img2 = ctk.CTkImage(light_image=img2, dark_image=img2, size=(280, 280))
+                    try:
+                        qr_label.configure(image=ctk_img2)
+                        status_var.set("请使用B站App扫码")
+                    except Exception:
+                        stop_poll()
+                        return
+            elif code == 86101:
+                pass
+            else:
+                try:
+                    status_var.set(f"状态异常: code={code}")
+                except Exception:
+                    return
+
+            schedule_poll()
+
+        dialog.protocol("WM_DELETE_WINDOW", lambda: (stop_poll(), dialog.destroy()))
+        schedule_poll()
+
+    def _on_login_success(self, api, cookies):
+        """登录成功后更新UI状态"""
+        self._api = api
+        self._logged_in = True
+
+        # 隐藏扫码按钮，显示登录状态
+        self.qr_login_btn.grid_remove()
+        self.login_status_label.configure(text="已登录 ✓")
+        self.login_status_label.grid()
+
+        self._log("扫码登录成功")
+
+    _TIME_PRESETS = {
+        "不限": 0,
+        "最近1小时": 3600,
+        "最近3小时": 10800,
+        "最近6小时": 21600,
+        "最近12小时": 43200,
+        "最近1天": 86400,
+        "最近3天": 259200,
+        "最近7天": 604800,
+    }
+
+    def _on_time_preset_change(self, value):
+        pass
+
+    def _parse_time_range(self) -> tuple:
+        """解析时间范围，返回 (start_ts, end_ts)"""
+        import time as _time
+        preset = self.time_combo.get()
+        if preset in self._TIME_PRESETS:
+            seconds = self._TIME_PRESETS[preset]
+            if seconds == 0:
+                return 0, 0
+            return int(_time.time()) - seconds, 0
+        return 0, 0
+
     def _on_sort_change(self, value):
         self.sort_mode_var.set("3" if value == "按时间" else "2")
 
@@ -347,14 +650,15 @@ class MainWindow:
         surface = Theme.get("SURFACE")
         border = Theme.get("BORDER")
 
-        for lbl in [self._video_title_label, self._params_title_label, self._log_title]:
+        for lbl in [self._content_title_label, self._params_title_label, self._log_title]:
             lbl.configure(text_color=text_primary)
-        for lbl in [self._video_label, self._pages_label, self._sort_label, self._path_label]:
+        for lbl in [self._link_label, self._keyword_label, self._pages_label, self._sort_label, self._path_label]:
             lbl.configure(text_color=text_secondary)
         self.progress_label.configure(text_color=text_secondary)
 
         # 输入框
-        for entry in [self.video_entry, self.max_pages_entry, self.path_entry]:
+        for entry in [self.link_entry, self.keyword_entry,
+                      self.max_pages_entry, self.path_entry]:
             entry.configure(
                 fg_color=surface,
                 border_color=border,
@@ -370,9 +674,20 @@ class MainWindow:
         )
 
         # 分段按钮
+        self.mode_segment.configure(
+            fg_color=border,
+            unselected_color=surface,
+        )
         self.sort_segment.configure(
             fg_color=border,
             unselected_color=surface,
+        )
+
+        # 下拉框
+        self.time_combo.configure(
+            fg_color=surface,
+            border_color=border,
+            text_color=text_primary,
         )
 
         # 进度条
@@ -398,11 +713,17 @@ class MainWindow:
         self._log(message)
 
     def _start_crawling(self):
-        video_input = self.video_entry.get().strip()
-        if not video_input:
-            messagebox.showwarning("警告", "请输入视频链接/BV号、动态链接或文章链接")
-            return
+        link_input = self.link_entry.get().strip()
 
+        if self.mode == "dynamics":
+            self._start_dynamic_crawling(link_input)
+        else:
+            if not link_input:
+                messagebox.showwarning("警告", "请输入链接或ID")
+                return
+            self._start_comment_crawling(link_input)
+
+    def _start_comment_crawling(self, video_input):
         self.is_crawling = True
         self.start_button.configure(state="disabled", fg_color="#ccc")
         self.stop_button.configure(
@@ -417,7 +738,6 @@ class MainWindow:
             text_color=Theme.get("DISABLED_FG"),
         )
 
-        # 进度条启动动画
         self.progress_bar.configure(mode="indeterminate")
         self.progress_bar.start()
 
@@ -457,6 +777,80 @@ class MainWindow:
         self.crawler_thread = threading.Thread(target=crawl_thread, daemon=True)
         self.crawler_thread.start()
 
+    def _start_dynamic_crawling(self, link_input):
+        if not self._logged_in or not self._api:
+            messagebox.showwarning("警告", "请先扫码登录")
+            return
+        api = self._api
+
+        parsed = parse_input(link_input)
+        uid = parsed.uid if parsed else None
+        if not uid:
+            uid = extract_uid(link_input)
+
+        keyword = self.keyword_entry.get().strip()
+        start_ts, end_ts = self._parse_time_range()
+
+        try:
+            max_pages = int(self.max_pages_var.get())
+            max_pages = max(1, min(100, max_pages))
+        except ValueError:
+            max_pages = 20
+
+        self.is_crawling = True
+        self.start_button.configure(state="disabled", fg_color="#ccc")
+        self.stop_button.configure(
+            state="normal",
+            fg_color=Theme.DANGER,
+            hover_color=Theme.DANGER_HOVER,
+            text_color="white",
+        )
+        self.export_button.configure(
+            state="disabled",
+            fg_color=Theme.get("DISABLED_BG"),
+            text_color=Theme.get("DISABLED_FG"),
+        )
+
+        self.progress_bar.configure(mode="indeterminate")
+        self.progress_bar.start()
+
+        self.log_console.clear()
+        self.dynamics = []
+
+        for card in self.stat_cards.values():
+            card.update_value("0")
+
+        self.dynamic_crawler = DynamicCrawler(
+            progress_callback=self._thread_safe_log,
+        )
+        self.dynamic_crawler.api = api
+
+        is_following = (uid is None)
+
+        def crawl_thread():
+            try:
+                if is_following:
+                    dynamics = self.dynamic_crawler.crawl_following_feed(
+                        keyword=keyword, max_pages=max_pages,
+                        start_time=start_ts, end_time=end_ts,
+                    )
+                else:
+                    dynamics = self.dynamic_crawler.crawl_dynamics(
+                        uid, keyword=keyword, max_pages=max_pages,
+                        start_time=start_ts, end_time=end_ts,
+                    )
+                processor = DataProcessor()
+                filtered = processor.filter_dynamics(dynamics, keyword)
+                self.dynamics = filtered
+                stats = {"total": len(filtered)}
+                self.root.after(0, lambda: self._dynamics_finished(stats))
+            except Exception as e:
+                logger.error(f"动态爬取异常: {e}", exc_info=True)
+                self.root.after(0, lambda: self._crawl_error(str(e)))
+
+        self.crawler_thread = threading.Thread(target=crawl_thread, daemon=True)
+        self.crawler_thread.start()
+
     def _crawl_finished(self, stats: dict):
         self.is_crawling = False
         self.start_button.configure(state="normal", fg_color=Theme.PRIMARY)
@@ -489,6 +883,37 @@ class MainWindow:
         else:
             messagebox.showwarning("警告", "未获取到任何评论数据")
 
+    def _dynamics_finished(self, stats: dict):
+        self.is_crawling = False
+        self.start_button.configure(state="normal", fg_color=Theme.PRIMARY)
+        self.stop_button.configure(
+            state="disabled",
+            fg_color=Theme.get("DISABLED_BG"),
+            hover_color=Theme.get("DISABLED_BG"),
+            text_color=Theme.get("DISABLED_FG"),
+        )
+        self.export_button.configure(
+            state="normal",
+            fg_color=Theme.ACCENT,
+            hover_color="#1f9bcb",
+            text_color="white",
+        )
+
+        self.progress_bar.stop()
+        self.progress_bar.configure(mode="determinate")
+        self.progress_bar.set(1.0)
+        self.progress_var.set("✅ 爬取完成")
+
+        self.stat_cards["total"].update_value(str(stats["total"]))
+        self.stat_cards["main"].update_value("-")
+        self.stat_cards["replies"].update_value("-")
+        self.stat_cards["likes"].update_value("-")
+
+        if self.dynamics:
+            messagebox.showinfo("完成", f"成功获取 {len(self.dynamics)} 条动态！")
+        else:
+            messagebox.showwarning("警告", "未获取到任何动态数据")
+
     def _crawl_error(self, error_msg: str):
         self.is_crawling = False
         self.start_button.configure(state="normal", fg_color=Theme.PRIMARY)
@@ -509,13 +934,21 @@ class MainWindow:
         messagebox.showerror("错误", f"爬取过程中出现错误:\n{error_msg}")
 
     def _stop_crawling(self):
-        if self.crawler:
+        if self.mode == "dynamics" and self.dynamic_crawler:
+            self.dynamic_crawler.stop()
+        elif self.crawler:
             self.crawler.stop()
         self._update_progress("正在停止...")
 
     def _export_csv(self):
+        if self.mode == "dynamics":
+            self._export_dynamics()
+        else:
+            self._export_comments()
+
+    def _export_comments(self):
         if not self.comments:
-            messagebox.showwarning("警告", "没有可导出的数据")
+            messagebox.showwarning("警告", "没有可导出的评论数据")
             return
 
         path_val = self.export_path_var.get().strip()
@@ -532,10 +965,31 @@ class MainWindow:
         except Exception as e:
             messagebox.showerror("错误", f"导出时出错:\n{str(e)}")
 
+    def _export_dynamics(self):
+        if not self.dynamics:
+            messagebox.showwarning("警告", "没有可导出的动态数据")
+            return
+
+        path_val = self.export_path_var.get().strip()
+        if not path_val:
+            messagebox.showwarning("警告", "请指定导出文件路径")
+            return
+
+        try:
+            success = CSVExporter.export_dynamics(self.dynamics, path_val)
+            if success:
+                messagebox.showinfo("成功", f"动态数据已导出到:\n{path_val}")
+            else:
+                messagebox.showerror("失败", "导出失败，请查看日志")
+        except Exception as e:
+            messagebox.showerror("错误", f"导出时出错:\n{str(e)}")
+
     def _on_closing(self):
         if self.is_crawling:
             if messagebox.askokcancel("退出", "正在爬取中，确定要退出吗？"):
-                if self.crawler:
+                if self.mode == "dynamics" and self.dynamic_crawler:
+                    self.dynamic_crawler.stop()
+                elif self.crawler:
                     self.crawler.stop()
                 self.root.destroy()
         else:

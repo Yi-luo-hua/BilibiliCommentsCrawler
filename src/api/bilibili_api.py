@@ -14,6 +14,10 @@ from config.config import (
     REPLY_API_URL,
     DYNAMIC_DETAIL_API_URL,
     ARTICLE_INFO_API_URL,
+    SPACE_DYNAMICS_API_URL,
+    FOLLOWING_FEED_API_URL,
+    PASSPORT_QR_GENERATE_URL,
+    PASSPORT_QR_POLL_URL,
     DEFAULT_HEADERS,
     REQUEST_TIMEOUT,
     REQUEST_DELAY_MIN,
@@ -214,6 +218,103 @@ class BilibiliAPI:
             "ps": DEFAULT_PAGE_SIZE,
         }
         return self._request(REPLY_API_URL, params)
+
+    # ============================================================
+    #  用户空间动态
+    # ============================================================
+    def get_user_dynamics(self, host_mid: int, offset: str = "") -> Optional[Dict]:
+        """
+        获取用户空间动态列表
+
+        Args:
+            host_mid: 目标用户UID
+            offset: 分页游标（首次请求为空字符串）
+
+        Returns:
+            包含 items 列表和翻页信息的字典，失败返回None
+        """
+        params = {
+            "host_mid": host_mid,
+            "timezone_offset": -480,
+        }
+        if offset:
+            params["offset"] = offset
+        return self._request(SPACE_DYNAMICS_API_URL, params)
+
+    def get_following_feed(self, offset: str = "") -> Optional[Dict]:
+        """
+        获取关注页动态流（需要登录Cookie）
+
+        Args:
+            offset: 分页游标（首次请求为空字符串）
+
+        Returns:
+            包含 items 列表和翻页信息的字典，失败返回None
+        """
+        params = {
+            "timezone_offset": -480,
+        }
+        if offset:
+            params["offset"] = offset
+        return self._request(FOLLOWING_FEED_API_URL, params)
+
+    # ============================================================
+    #  扫码登录
+    # ============================================================
+    def generate_qrcode(self) -> Optional[tuple]:
+        """
+        获取登录二维码URL和key
+
+        Returns:
+            (url, qrcode_key) 元组，失败返回None
+        """
+        try:
+            r = self.session.get(PASSPORT_QR_GENERATE_URL, timeout=REQUEST_TIMEOUT)
+            data = r.json()
+            if data.get('code') == 0:
+                d = data['data']
+                return d['url'], d['qrcode_key']
+            logger.error(f"获取二维码失败: code={data.get('code')}, msg={data.get('message')}")
+            return None
+        except Exception as e:
+            logger.error(f"获取二维码异常: {e}")
+            return None
+
+    def poll_qrcode(self, qrcode_key: str) -> tuple:
+        """
+        轮询扫码状态
+
+        Args:
+            qrcode_key: 二维码key
+
+        Returns:
+            (status_code, cookies_dict_or_none)
+            status_code: 0=成功, 86101=未扫码, 86090=已扫码待确认, 86038=过期
+        """
+        try:
+            r = self.session.get(
+                PASSPORT_QR_POLL_URL,
+                params={"qrcode_key": qrcode_key},
+                timeout=REQUEST_TIMEOUT,
+            )
+            data = r.json()
+            # 扫码状态在 data.data.code 中（嵌套结构）
+            inner = data.get('data', {})
+            status_code = inner.get('code', data.get('code', -1))
+            if status_code == 0:
+                # 登录成功，从响应头提取cookies
+                cookies = {}
+                for cookie_name in ['SESSDATA', 'bili_jct', 'DedeUserID', 'sid']:
+                    if cookie_name in r.cookies:
+                        cookies[cookie_name] = r.cookies[cookie_name]
+                cookie_str = '; '.join(f'{k}={v}' for k, v in r.cookies.items())
+                if cookie_str:
+                    self.set_cookie(cookie_str)
+                return 0, cookies
+            return status_code, None
+        except Exception as e:
+            logger.error(f"轮询扫码状态异常: {e}")
+            return -1, None
 
     def set_cookie(self, cookie: str):
         """

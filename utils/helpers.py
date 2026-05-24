@@ -161,20 +161,60 @@ def extract_cvid(url_or_id: str) -> Optional[int]:
 
 
 # ============================================================
+#  用户 UID 解析
+# ============================================================
+def extract_uid(url_or_id: str) -> Optional[int]:
+    """
+    从空间URL或纯数字字符串中提取用户UID
+
+    支持的格式:
+        - https://space.bilibili.com/1234567
+        - https://space.bilibili.com/1234567/video
+        - 纯数字 (少于12位视为UID，区别于动态ID)
+
+    Args:
+        url_or_id: 空间URL或UID字符串
+
+    Returns:
+        UID整数，如果无法提取则返回None
+    """
+    url_or_id = url_or_id.strip()
+    if not url_or_id:
+        return None
+
+    # space.bilibili.com/数字
+    match = re.search(r'space\.bilibili\.com/(\d+)', url_or_id)
+    if match:
+        return int(match.group(1))
+
+    # 纯数字：少于12位视为UID（动态ID通常16位以上）
+    if url_or_id.isdigit():
+        uid = int(url_or_id)
+        if uid < 10 ** 12:
+            return uid
+
+    return None
+
+
+# ============================================================
 #  统一输入解析
 # ============================================================
 class ParsedInput:
     """解析后的用户输入"""
-    __slots__ = ('content_type', 'oid', 'bvid', 'raw_input')
+    __slots__ = ('content_type', 'oid', 'bvid', 'uid', 'raw_input')
 
-    def __init__(self, content_type: int, oid: Optional[int] = None,
-                 bvid: Optional[str] = None, raw_input: str = ''):
+    def __init__(self, content_type: Optional[int] = None, oid: Optional[int] = None,
+                 bvid: Optional[str] = None, uid: Optional[int] = None,
+                 raw_input: str = ''):
         self.content_type = content_type
         self.oid = oid
         self.bvid = bvid
+        self.uid = uid
         self.raw_input = raw_input
 
     def __repr__(self):
+        if self.uid:
+            return f"ParsedInput(uid={self.uid})"
         return (f"ParsedInput(type={ContentType.label(self.content_type)}, "
                 f"oid={self.oid}, bvid={self.bvid})")
 
@@ -213,7 +253,12 @@ def parse_input(url_or_id: str) -> Optional[ParsedInput]:
             raw_input=url_or_id,
         )
 
-    # 3. 视频 (BV号 / AV号)
+    # 3. 用户空间 (space.bilibili.com 或纯数字UID)
+    uid = extract_uid(url_or_id)
+    if uid:
+        return ParsedInput(uid=uid, raw_input=url_or_id)
+
+    # 4. 视频 (BV号 / AV号)
     bvid, avid = parse_video_id(url_or_id)
     if bvid or avid:
         return ParsedInput(

@@ -86,3 +86,70 @@ class CSVExporter:
         except Exception as e:
             logger.error(f"导出CSV时出错: {e}")
             return False
+
+    # 动态导出专用列映射
+    COLUMN_MAPPING_DYNAMICS = {
+        'dynamic_id': '动态ID',
+        'type': '类型',
+        'content': '内容',
+        'username': '用户名',
+        'timestamp': '时间戳',
+        'publish_time': '发布时间',
+        'like_count': '点赞数',
+        'comment_count': '评论数',
+        'forward_count': '转发数',
+    }
+
+    DEFAULT_COLUMNS_DYNAMICS = [
+        'dynamic_id',
+        'username',
+        'type',
+        'content',
+        'publish_time',
+        'like_count',
+        'comment_count',
+        'forward_count',
+    ]
+
+    @classmethod
+    def export_dynamics(
+        cls,
+        dynamics: List[Dict],
+        filepath: str,
+        columns: Optional[List[str]] = None,
+        index: bool = False,
+    ) -> bool:
+        """
+        导出动态数据到CSV文件
+
+        Args:
+            dynamics: 动态列表
+            filepath: 输出文件路径
+            columns: 要导出的列名列表，默认使用 DEFAULT_COLUMNS_DYNAMICS
+            index: 是否包含索引列
+
+        Returns:
+            如果导出成功返回True，否则返回False
+        """
+        if not dynamics:
+            logger.warning("没有动态数据可导出")
+            return False
+
+        try:
+            df = pd.DataFrame(dynamics)
+
+            if columns is None:
+                columns = cls.DEFAULT_COLUMNS_DYNAMICS
+            available = [c for c in columns if c in df.columns]
+            if not available:
+                available = df.columns.tolist()
+            df = df[available]
+
+            df = df.rename(columns=cls.COLUMN_MAPPING_DYNAMICS)
+            df.to_csv(filepath, index=index, encoding=CSV_ENCODING)
+            logger.info(f"成功导出 {len(dynamics)} 条动态到: {filepath}")
+            return True
+
+        except Exception as e:
+            logger.error(f"导出动态CSV时出错: {e}")
+            return False
