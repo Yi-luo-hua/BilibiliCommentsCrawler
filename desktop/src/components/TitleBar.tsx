@@ -68,7 +68,7 @@ export function TitleBar({ logo, onLog }: Props) {
       <div className="brand">
         <img src={logo} alt="" />
         <div>
-          <h1>Bilibili Crawler</h1>
+          <h1>BilibiliCrawler</h1>
           <p>评论 / 动态</p>
         </div>
       </div>

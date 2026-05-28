@@ -1,6 +1,6 @@
-# Bilibili Comments Crawler
+# BilibiliCrawler
 
-Bilibili Comments Crawler 是一个 B 站评论 / 动态爬取工具。v2.00 起项目迁移为 **Tauri + React + TypeScript** 桌面壳，Python 爬虫逻辑作为本地 sidecar 后端运行，通过本地进程通信完成爬取、扫码登录和 CSV 导出。
+BilibiliCrawler 是一个 B 站评论 / 动态爬取工具。v2.00 起项目迁移为 **Tauri + React + TypeScript** 桌面壳，Python 爬虫逻辑作为本地 sidecar 后端运行，通过本地进程通信完成爬取、扫码登录和 CSV 导出。
 
 > 旧版 Python GUI / 单 exe 代码已保留在 `legacy-python-gui` 分支，主分支后续以安装包桌面应用为主。
 
@@ -21,7 +21,7 @@ Bilibili Comments Crawler 是一个 B 站评论 / 动态爬取工具。v2.00 起
 
 ## 下载使用
 
-前往 [Releases](https://github.com/Yi-luo-hua/BCC/releases) 下载最新安装包：
+前往 [Releases](https://github.com/Yi-luo-hua/BilibiliCrawler/releases) 下载最新安装包：
 
 - `BilibiliCrawler-Setup-2.0.0-x64.exe`
 
@@ -118,7 +118,7 @@ desktop\src-tauri\target\release\bundle\nsis\
 ## 项目结构
 
 ```text
-BilibiliCommentsCrawler/
+BilibiliCrawler/
 ├── assets/                         应用 logo 与图标资源
 │   ├── app_logo.ico
 │   └── app_logo.png

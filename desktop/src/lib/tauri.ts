@@ -43,7 +43,7 @@ export async function chooseCsvPath(defaultName: string): Promise<string | null>
   return selected || null;
 }
 
-const fallbackConfigKey = "bilibili-crawler-ui-config";
+const fallbackConfigKey = "bilibilicrawler-ui-config";
 
 export async function readConfig(): Promise<UIConfig> {
   const defaults: UIConfig = {
