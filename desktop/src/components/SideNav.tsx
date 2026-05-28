@@ -33,7 +33,6 @@ export function SideNav({ mode, running, loggedIn, onModeChange }: Props) {
           );
         })}
       </nav>
-      <div className="nav-footer">NSIS installer ready</div>
     </aside>
   );
 }
